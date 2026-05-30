@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PySide6.QtWidgets import QSlider
+from PySide6.QtWidgets import QSlider, QSystemTrayIcon
 
 from .config import (
     COLOR_CN,
@@ -99,6 +99,14 @@ class SettingsDialog(QDialog):
             self.autostart.setToolTip("仅 Windows 支持；当前环境不可用")
         form.addRow("", self.autostart)
 
+        # 启动时最小化到托盘（需系统托盘）
+        self.start_hidden = QCheckBox("启动时最小化到托盘")
+        self.start_hidden.setChecked(config.start_hidden)
+        if not QSystemTrayIcon.isSystemTrayAvailable():
+            self.start_hidden.setEnabled(False)
+            self.start_hidden.setToolTip("需要系统托盘")
+        form.addRow("", self.start_hidden)
+
         root = QVBoxLayout(self)
         root.addLayout(form)
 
@@ -116,6 +124,7 @@ class SettingsDialog(QDialog):
         self.config.font_size = self.font_size.value()
         self.config.color_scheme = self.color.currentData()
         self.config.always_on_top = self.on_top.isChecked()
+        self.config.start_hidden = self.start_hidden.isChecked()
         self.config.clamp().save()
         if autostart.is_supported():
             autostart.set_enabled(self.autostart.isChecked())

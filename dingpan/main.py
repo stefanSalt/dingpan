@@ -126,7 +126,17 @@ class DingpanApp:
         self._build_tray()
 
         self.thread.start()
-        self.window.show()
+        # 启动即最小化到托盘：仅当用户勾选且确有托盘时才不显示窗口
+        # （无托盘却隐藏会导致无法唤出，故强制显示）
+        if self.config.start_hidden and self.tray is not None:
+            self.tray.showMessage(
+                "盯盘悬浮窗",
+                "已在后台运行，双击托盘图标显示窗口。",
+                QSystemTrayIcon.Information,
+                3000,
+            )
+        else:
+            self.window.show()
         self.app.aboutToQuit.connect(self._cleanup)
 
     # ---- 托盘 ----

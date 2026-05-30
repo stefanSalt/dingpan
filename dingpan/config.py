@@ -47,6 +47,7 @@ class Config:
     font_size: int = 13
     color_scheme: str = COLOR_CN
     always_on_top: bool = True
+    start_hidden: bool = False     # 启动时最小化到托盘（需系统托盘）
     win_x: int = -1                # 窗口位置；-1 表示未设置（首次用默认位置）
     win_y: int = -1
 
