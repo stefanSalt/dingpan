@@ -28,6 +28,7 @@ from .config import (
     MODES,
     Config,
 )
+from . import autostart
 
 
 class SettingsDialog(QDialog):
@@ -89,6 +90,15 @@ class SettingsDialog(QDialog):
         self.on_top.setChecked(config.always_on_top)
         form.addRow("", self.on_top)
 
+        # 开机自启（仅 Windows）
+        self.autostart = QCheckBox("开机自启（登录时自动启动）")
+        if autostart.is_supported():
+            self.autostart.setChecked(autostart.is_enabled())
+        else:
+            self.autostart.setEnabled(False)
+            self.autostart.setToolTip("仅 Windows 支持；当前环境不可用")
+        form.addRow("", self.autostart)
+
         root = QVBoxLayout(self)
         root.addLayout(form)
 
@@ -107,5 +117,7 @@ class SettingsDialog(QDialog):
         self.config.color_scheme = self.color.currentData()
         self.config.always_on_top = self.on_top.isChecked()
         self.config.clamp().save()
+        if autostart.is_supported():
+            autostart.set_enabled(self.autostart.isChecked())
         self.changed.emit()
         self.accept()
