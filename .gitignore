@@ -10,6 +10,8 @@ dist/
 # 用户本地配置（首次运行自动生成）
 config.json
 
-# 一次性引导脚本（本地用，不入库）
+# 一次性引导脚本 / 本地诊断（本地用，不入库）
 git_setup.sh
 push.sh
+probe_rate.py
+strip_claude.sh
