@@ -117,6 +117,7 @@ class DingpanApp:
         # 窗口菜单信号
         self.window.addRequested.connect(self.open_add)
         self.window.settingsRequested.connect(self.open_settings)
+        self.window.hideRequested.connect(self._hide_to_tray)
         self.window.quitRequested.connect(self.quit)
 
         self._add_dialog: AddSymbolDialog | None = None
@@ -157,6 +158,7 @@ class DingpanApp:
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(self._on_tray_activated)
         self.tray.show()
+        self.window.tray_available = True   # 让窗口右键菜单显示「隐藏到托盘」
 
     def _on_tray_activated(self, reason) -> None:
         if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
@@ -169,6 +171,17 @@ class DingpanApp:
         else:
             self.window.show()
             self.window.raise_()
+
+    def _hide_to_tray(self) -> None:
+        """隐藏悬浮窗到托盘，并提示恢复方式。"""
+        self.window.hide()
+        if self.tray is not None:
+            self.tray.showMessage(
+                "盯盘悬浮窗",
+                "已隐藏到托盘，双击托盘图标可恢复显示。",
+                QSystemTrayIcon.Information,
+                3000,
+            )
 
     def set_mode(self, mode: str) -> None:
         if mode != self.config.display_mode:

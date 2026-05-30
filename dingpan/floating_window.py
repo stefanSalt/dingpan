@@ -69,6 +69,7 @@ class FloatingWindow(QWidget):
 
     addRequested = Signal()       # 请求打开「添加品种」
     settingsRequested = Signal()  # 请求打开「设置」
+    hideRequested = Signal()      # 请求隐藏到托盘
     quitRequested = Signal()      # 请求退出
 
     def __init__(self, config: Config):
@@ -78,6 +79,7 @@ class FloatingWindow(QWidget):
         self._cells: dict[str, dict[str, QLabel]] = {}
         self._drag_pos = None
         self._stale = False
+        self.tray_available = False   # 由主程序按系统托盘可用性设置；决定是否显示「隐藏到托盘」
 
         self._grid = QGridLayout(self)
         self._grid.setContentsMargins(14, 10, 14, 12)
@@ -282,6 +284,10 @@ class FloatingWindow(QWidget):
 
         menu.addAction("添加品种…", self.addRequested.emit)
         menu.addAction("设置…", self.settingsRequested.emit)
+
+        # 仅在有系统托盘时提供「隐藏到托盘」，否则隐藏后无法恢复
+        if self.tray_available:
+            menu.addAction("隐藏到托盘", self.hideRequested.emit)
 
         top = QAction("置顶", menu, checkable=True)
         top.setChecked(self.config.always_on_top)
