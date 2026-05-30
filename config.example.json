@@ -7,6 +7,7 @@
   "color_scheme": "cn",
   "always_on_top": true,
   "start_hidden": false,
+  "check_update_on_start": true,
   "win_x": -1,
   "win_y": -1
 }

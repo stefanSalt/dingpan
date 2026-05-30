@@ -30,7 +30,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name="盯盘",
+    name="Dingpan",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

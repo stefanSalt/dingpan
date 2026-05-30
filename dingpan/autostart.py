@@ -37,6 +37,11 @@ def _launch_command() -> str:
     return f'"{exe}" "{os.path.join(_base_dir(), "app.py")}"'
 
 
+def command_for_exe(path: str) -> str:
+    """给定 exe 路径，返回可写入注册表的启动命令（供安装后重指）。"""
+    return f'"{path}"'
+
+
 def is_enabled() -> bool:
     """是否已开启开机自启。"""
     if not is_supported():
@@ -49,15 +54,17 @@ def is_enabled() -> bool:
         return False
 
 
-def enable() -> bool:
-    """写入启动项；成功返回 True。"""
+def enable(command: str | None = None) -> bool:
+    """写入启动项；不传 ``command`` 则自动推断当前程序。成功返回 True。"""
     if not is_supported():
         return False
     try:
         with winreg.OpenKey(
             winreg.HKEY_CURRENT_USER, _RUN_KEY, 0, winreg.KEY_SET_VALUE
         ) as key:
-            winreg.SetValueEx(key, _VALUE_NAME, 0, winreg.REG_SZ, _launch_command())
+            winreg.SetValueEx(
+                key, _VALUE_NAME, 0, winreg.REG_SZ, command or _launch_command()
+            )
         return True
     except OSError:
         return False

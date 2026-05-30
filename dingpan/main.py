@@ -12,11 +12,21 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 
-from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal, Slot
-from PySide6.QtGui import QAction, QActionGroup, QColor, QIcon, QPainter, QPixmap
-from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, QUrl, Signal, Slot
+from PySide6.QtGui import (
+    QAction,
+    QActionGroup,
+    QColor,
+    QDesktopServices,
+    QIcon,
+    QPainter,
+    QPixmap,
+)
+from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
+from . import installer, updater
 from .add_symbol_dialog import AddSymbolDialog
 from .config import MODE_LABELS, MODES, Config, _base_dir
 from .floating_window import FloatingWindow
@@ -65,10 +75,11 @@ class Fetcher(QObject):
 
 
 class _Controller(QObject):
-    """主线程 → 后台线程的控制信号（跨线程自动走队列连接）。"""
+    """跨线程信号中转（主线程 QObject，队列连接自动切回主线程）。"""
 
-    codesChanged = Signal(object)
-    intervalChanged = Signal(int)
+    codesChanged = Signal(object)     # 主线程 → 取数线程：品种变化
+    intervalChanged = Signal(int)     # 主线程 → 取数线程：间隔变化
+    update_checked = Signal(object)   # 更新检查线程 → 主线程：结果(UpdateInfo|None)
 
 
 def _make_icon() -> QIcon:
@@ -113,12 +124,19 @@ class DingpanApp:
         self.fetcher.quotesReady.connect(self.window.set_quotes)
         self.controller.codesChanged.connect(self.fetcher.set_codes)
         self.controller.intervalChanged.connect(self.fetcher.set_interval)
+        self.controller.update_checked.connect(self._on_update_checked)
 
         # 窗口菜单信号
         self.window.addRequested.connect(self.open_add)
         self.window.settingsRequested.connect(self.open_settings)
         self.window.hideRequested.connect(self._hide_to_tray)
+        self.window.checkUpdateRequested.connect(self.check_update_manual)
+        self.window.installRequested.connect(self.do_install)
         self.window.quitRequested.connect(self.quit)
+        # 菜单项可用性
+        self.window.can_check_update = True
+        self.window.can_install = installer.is_supported() and not installer.is_installed()
+        self._check_manual = False    # 当前检查是否由用户手动触发
 
         self._add_dialog: AddSymbolDialog | None = None
         self._settings_dialog: SettingsDialog | None = None
@@ -138,6 +156,11 @@ class DingpanApp:
         else:
             self.window.show()
         self.app.aboutToQuit.connect(self._cleanup)
+
+        # 清理上次更新残留 + 启动时后台检查更新
+        updater.cleanup_old()
+        if self.config.check_update_on_start:
+            self._spawn_check(manual=False)
 
     # ---- 托盘 ----
     def _build_tray(self) -> None:
@@ -163,6 +186,9 @@ class DingpanApp:
 
         menu.addAction("添加品种…", self.open_add)
         menu.addAction("设置…", self.open_settings)
+        menu.addAction("检查更新…", self.check_update_manual)
+        if installer.is_supported() and not installer.is_installed():
+            menu.addAction("安装到系统…", self.do_install)
         menu.addSeparator()
         menu.addAction("退出", self.quit)
         self.tray.setContextMenu(menu)
@@ -192,6 +218,93 @@ class DingpanApp:
                 QSystemTrayIcon.Information,
                 3000,
             )
+
+    # ---- 检查更新 / 安装 ----
+    def check_update_manual(self) -> None:
+        """用户手动触发检查更新。"""
+        self._spawn_check(manual=True)
+
+    def _spawn_check(self, manual: bool) -> None:
+        self._check_manual = manual
+        threading.Thread(target=self._do_check, daemon=True).start()
+
+    def _do_check(self) -> None:
+        info = updater.check_for_update()            # 后台线程做网络请求
+        self.controller.update_checked.emit(info)    # 经队列连接切回主线程
+
+    def _on_update_checked(self, info) -> None:
+        manual = self._check_manual
+        if info is None:
+            if manual:
+                QMessageBox.warning(self.window, "检查更新", "检查失败，请稍后重试（或检查网络）。")
+            return
+        if updater.is_newer(info.version, updater.current_version()):
+            self._prompt_update(info)
+        elif manual:
+            QMessageBox.information(
+                self.window, "检查更新", f"已是最新版本（v{updater.current_version()}）。"
+            )
+
+    def _prompt_update(self, info) -> None:
+        notes = (info.notes or "").strip()
+        if len(notes) > 600:
+            notes = notes[:600] + "…"
+        text = (
+            f"发现新版本 {info.tag}（当前 v{updater.current_version()}）。\n\n"
+            f"{notes}\n\n是否现在更新？"
+        )
+        box = QMessageBox(self.window)
+        box.setWindowTitle("发现新版本")
+        box.setIcon(QMessageBox.Question)
+        box.setText(text)
+        if updater.is_update_supported() and info.asset_url:
+            btn_update = box.addButton("更新并重启", QMessageBox.AcceptRole)
+            btn_notes = box.addButton("查看说明", QMessageBox.ActionRole)
+            box.addButton("以后再说", QMessageBox.RejectRole)
+            box.exec()
+            clicked = box.clickedButton()
+            if clicked is btn_update:
+                self._do_update(info)
+            elif clicked is btn_notes:
+                self._open_url(info.page_url)
+        else:
+            # 不支持原地更新（开发态 / 非 Windows）：引导到下载页
+            btn_open = box.addButton("打开下载页", QMessageBox.AcceptRole)
+            box.addButton("取消", QMessageBox.RejectRole)
+            box.exec()
+            if box.clickedButton() is btn_open:
+                self._open_url(info.page_url)
+
+    def _do_update(self, info) -> None:
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            ok, msg = updater.apply_update(info)
+        finally:
+            QApplication.restoreOverrideCursor()
+        if ok:
+            self.quit()                  # 新版本已启动，退出当前进程
+        else:
+            QMessageBox.warning(self.window, "更新", msg)
+
+    def do_install(self) -> None:
+        if not installer.is_supported():
+            QMessageBox.information(
+                self.window, "安装到系统", "仅 Windows 打包版支持安装到系统。"
+            )
+            return
+        ok, msg = installer.install(desktop=True)
+        if ok:
+            self.window.can_install = False
+            QMessageBox.information(
+                self.window,
+                "安装到系统",
+                msg + "\n\n以后可从开始菜单 / 桌面快捷方式启动。",
+            )
+        else:
+            QMessageBox.warning(self.window, "安装到系统", msg)
+
+    def _open_url(self, url: str) -> None:
+        QDesktopServices.openUrl(QUrl(url))
 
     def set_mode(self, mode: str) -> None:
         if mode != self.config.display_mode:

@@ -107,6 +107,11 @@ class SettingsDialog(QDialog):
             self.start_hidden.setToolTip("需要系统托盘")
         form.addRow("", self.start_hidden)
 
+        # 启动时检查更新
+        self.check_update = QCheckBox("启动时检查更新")
+        self.check_update.setChecked(config.check_update_on_start)
+        form.addRow("", self.check_update)
+
         root = QVBoxLayout(self)
         root.addLayout(form)
 
@@ -125,6 +130,7 @@ class SettingsDialog(QDialog):
         self.config.color_scheme = self.color.currentData()
         self.config.always_on_top = self.on_top.isChecked()
         self.config.start_hidden = self.start_hidden.isChecked()
+        self.config.check_update_on_start = self.check_update.isChecked()
         self.config.clamp().save()
         if autostart.is_supported():
             autostart.set_enabled(self.autostart.isChecked())

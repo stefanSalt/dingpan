@@ -70,6 +70,8 @@ class FloatingWindow(QWidget):
     addRequested = Signal()       # 请求打开「添加品种」
     settingsRequested = Signal()  # 请求打开「设置」
     hideRequested = Signal()      # 请求隐藏到托盘
+    checkUpdateRequested = Signal()  # 请求检查更新
+    installRequested = Signal()      # 请求安装到系统
     quitRequested = Signal()      # 请求退出
 
     def __init__(self, config: Config):
@@ -80,6 +82,8 @@ class FloatingWindow(QWidget):
         self._drag_pos = None
         self._stale = False
         self.tray_available = False   # 由主程序按系统托盘可用性设置；决定是否显示「隐藏到托盘」
+        self.can_check_update = False  # 由主程序设置：是否显示「检查更新」
+        self.can_install = False       # 由主程序设置：是否显示「安装到系统」
 
         self._grid = QGridLayout(self)
         self._grid.setContentsMargins(14, 10, 14, 12)
@@ -284,6 +288,11 @@ class FloatingWindow(QWidget):
 
         menu.addAction("添加品种…", self.addRequested.emit)
         menu.addAction("设置…", self.settingsRequested.emit)
+
+        if self.can_check_update:
+            menu.addAction("检查更新…", self.checkUpdateRequested.emit)
+        if self.can_install:
+            menu.addAction("安装到系统…", self.installRequested.emit)
 
         # 仅在有系统托盘时提供「隐藏到托盘」，否则隐藏后无法恢复
         if self.tray_available:
