@@ -12,7 +12,7 @@ icon = "assets/icon.ico" if os.path.exists("assets/icon.ico") else None
 datas = [("assets", "assets")] if os.path.isdir("assets") else []
 
 a = Analysis(
-    ["dingpan/main.py"],
+    ["app.py"],
     pathex=[],
     binaries=[],
     datas=datas,

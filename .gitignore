@@ -12,3 +12,4 @@ config.json
 
 # 一次性引导脚本（本地用，不入库）
 git_setup.sh
+push.sh
