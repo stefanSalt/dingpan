@@ -1,0 +1,11 @@
+{
+  "symbols": ["XAU", "XAG", "CL", "OIL"],
+  "display_mode": "standard",
+  "refresh_interval": 3,
+  "opacity": 0.92,
+  "font_size": 13,
+  "color_scheme": "cn",
+  "always_on_top": true,
+  "win_x": -1,
+  "win_y": -1
+}

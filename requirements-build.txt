@@ -1,0 +1,3 @@
+# 打包（GitHub Actions / 本地）用依赖
+PySide6>=6.6
+pyinstaller>=6.0
