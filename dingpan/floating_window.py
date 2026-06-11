@@ -127,21 +127,25 @@ class FloatingWindow(QWidget):
                 w.deleteLater()
         self._cells.clear()
 
+    def _label_qss(self, color: str, *, bold: bool = False, size: int | None = None) -> str:
+        """构造标签样式。务必把 font-size 写进 QSS——一旦控件设了样式表，
+        通过父窗口 setFont 继承来的字号会被 Qt 忽略，否则字号设置看着不生效。"""
+        pt = size if size is not None else self.config.font_size
+        qss = f"color:{color}; font-family:Consolas; font-size:{pt}pt;"
+        if bold:
+            qss += " font-weight:600;"
+        return qss
+
     def _make_label(self, text: str = "", *, align_right: bool = False,
                     color: str = _NAME, bold: bool = False,
-                    px: int | None = None) -> QLabel:
+                    size: int | None = None) -> QLabel:
         lbl = QLabel(text)
         # 鼠标穿透：点在任意标签上都能拖动整个窗口、弹出右键菜单
         lbl.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         lbl.setAlignment(
             (Qt.AlignRight if align_right else Qt.AlignLeft) | Qt.AlignVCenter
         )
-        style = f"color:{color};"
-        if bold:
-            style += "font-weight:600;"
-        if px is not None:
-            style += f"font-size:{px}px;"
-        lbl.setStyleSheet(style)
+        lbl.setStyleSheet(self._label_qss(color, bold=bold, size=size))
         return lbl
 
     def rebuild(self) -> None:
@@ -171,7 +175,7 @@ class FloatingWindow(QWidget):
                 row += 1
                 if mode == MODE_DETAILED:
                     sub = self._make_label(
-                        color=_FLAT, px=max(9, self.config.font_size - 3)
+                        color=_FLAT, size=max(9, self.config.font_size - 3)
                     )
                     self._grid.addWidget(sub, row, 0, 1, 4)
                     cells["sub"] = sub
@@ -204,7 +208,7 @@ class FloatingWindow(QWidget):
                 for key in ("price", "change", "pct"):
                     if key in cells:
                         cells[key].setText("—")
-                        cells[key].setStyleSheet(f"color:{_FLAT};")
+                        cells[key].setStyleSheet(self._label_qss(_FLAT))
                 if "sub" in cells:
                     cells["sub"].setText("")
                 continue
@@ -213,17 +217,17 @@ class FloatingWindow(QWidget):
             if mode == MODE_COMPACT:
                 cells["name"].setText(_short_name(q.name))
                 cells["price"].setText(_fmt(q.price))
-                cells["price"].setStyleSheet(f"color:{color}; font-weight:600;")
+                cells["price"].setStyleSheet(self._label_qss(color, bold=True))
                 cells["pct"].setText(f"{_arrow(q.change)}{q.change_pct:+.2f}%")
-                cells["pct"].setStyleSheet(f"color:{color};")
+                cells["pct"].setStyleSheet(self._label_qss(color))
             else:
                 cells["name"].setText(q.name)
                 cells["price"].setText(_fmt(q.price))
-                cells["price"].setStyleSheet(f"color:{color}; font-weight:600;")
+                cells["price"].setStyleSheet(self._label_qss(color, bold=True))
                 cells["change"].setText(f"{q.change:+.2f}")
-                cells["change"].setStyleSheet(f"color:{color};")
+                cells["change"].setStyleSheet(self._label_qss(color))
                 cells["pct"].setText(f"{_arrow(q.change)}{q.change_pct:+.2f}%")
-                cells["pct"].setStyleSheet(f"color:{color};")
+                cells["pct"].setStyleSheet(self._label_qss(color))
                 if "sub" in cells:
                     cells["sub"].setText(
                         f"高 {_fmt(q.high)}   低 {_fmt(q.low)}   "
