@@ -26,7 +26,7 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox, QSystemTrayIcon
 
-from . import installer, updater
+from . import __version__, installer, updater
 from .add_symbol_dialog import AddSymbolDialog
 from .config import MODE_LABELS, MODES, Config, _base_dir
 from .floating_window import FloatingWindow
@@ -169,8 +169,11 @@ class DingpanApp:
             print("（提示：当前环境无系统托盘，用窗口右键菜单操作。）")
             return
         self.tray = QSystemTrayIcon(_make_icon(), self.app)
-        self.tray.setToolTip("盯盘悬浮窗")
+        self.tray.setToolTip(f"盯盘悬浮窗 v{__version__}")
         menu = QMenu()
+        header = menu.addAction(f"盯盘悬浮窗 v{__version__}")
+        header.setEnabled(False)
+        menu.addSeparator()
         menu.addAction("显示 / 隐藏", self.toggle_show)
 
         mode_menu = menu.addMenu("显示模式")

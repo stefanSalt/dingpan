@@ -134,10 +134,39 @@ def cleanup_old() -> None:
         pass  # 可能仍被占用，下次启动再清
 
 
-def apply_update(info: UpdateInfo) -> tuple[bool, str]:
-    """下载并就地替换、重启。返回 ``(已启动替换?, 消息)``。
+# 自动更新用的 PowerShell 脚本：等本进程退出 → 覆盖 exe → 启动新版 → 自删。
+# 用 PowerShell 而非 bat：原生支持 Unicode 路径、Wait-Process 干净等待，
+# 避免 onefile 临时目录清理竞争与「重命名运行中 exe」带来的报错/不重启问题。
+_PS_UPDATER = (
+    "param([int]$ProcId,[string]$Src,[string]$Dst)\n"
+    "try { Wait-Process -Id $ProcId -Timeout 30 } catch {}\n"
+    "for ($i=0; $i -lt 30; $i++) {\n"
+    "  try { Move-Item -LiteralPath $Src -Destination $Dst -Force; break }\n"
+    "  catch { Start-Sleep -Seconds 1 }\n"
+    "}\n"
+    "Start-Process -FilePath $Dst\n"
+    "try { Remove-Item -LiteralPath $PSCommandPath -Force } catch {}\n"
+)
 
-    仅 Windows 打包态可用；成功返回后调用方应立即退出应用。
+
+def _write_ps_updater() -> str | None:
+    import tempfile
+    try:
+        path = os.path.join(tempfile.gettempdir(), "dingpan_update.ps1")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(_PS_UPDATER)
+        return path
+    except OSError:
+        return None
+
+
+def apply_update(info: UpdateInfo) -> tuple[bool, str]:
+    """下载新版并通过外部脚本替换、重启。返回 ``(已启动更新?, 消息)``。
+
+    机制：下载到临时文件 → 写一段 PowerShell（等本进程退出后覆盖 exe 再启动新版）
+    → 分离启动该脚本 → 本函数返回 True 后调用方应立即退出应用。
+    这样**不在运行中替换自身**、不残留 .old，也避免 onefile 临时目录清理报错。
+    仅 Windows 打包态可用。
     """
     if not is_update_supported():
         return False, "仅 Windows 打包版支持自动更新。"
@@ -146,35 +175,29 @@ def apply_update(info: UpdateInfo) -> tuple[bool, str]:
 
     cur = sys.executable
     folder = os.path.dirname(cur)
-    download = os.path.join(folder, "Dingpan.download.exe")
-    old = cur + ".old"
+    download = os.path.join(folder, "Dingpan.update.exe")
+    if not _download(info.asset_url, download):     # 退到 %TEMP% 再试一次
+        import tempfile
+        download = os.path.join(tempfile.gettempdir(), "Dingpan.update.exe")
+        if not _download(info.asset_url, download):
+            return False, "下载失败，请检查网络后重试。"
 
-    if not _download(info.asset_url, download):
-        return False, "下载失败，请检查网络后重试。"
+    ps = _write_ps_updater()
+    if not ps:
+        return False, "无法写入更新脚本（临时目录不可写）。"
 
+    detached = 0x00000008                                       # DETACHED_PROCESS
+    no_window = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
     try:
-        if os.path.exists(old):          # 清理上次残留的备份
-            try:
-                os.remove(old)
-            except OSError:
-                pass
-        os.replace(cur, old)             # 运行中的 exe 可被重命名
-        os.replace(download, cur)        # 新版落到原路径
+        subprocess.Popen(
+            ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", ps,
+             "-ProcId", str(os.getpid()), "-Src", download, "-Dst", cur],
+            creationflags=detached | no_window,
+            close_fds=True,
+        )
     except OSError as e:
-        try:                             # 回滚
-            if not os.path.exists(cur) and os.path.exists(old):
-                os.replace(old, cur)
-            if os.path.exists(download):
-                os.remove(download)
-        except OSError:
-            pass
-        return False, f"替换失败：{e}"
-
-    try:
-        subprocess.Popen([cur], close_fds=True)   # 启动新版本（分离进程）
-    except OSError as e:
-        return False, f"已更新，但自动重启失败：{e}（请手动启动）"
-    return True, "更新完成，正在重启…"
+        return False, f"启动更新脚本失败：{e}"
+    return True, "正在更新并重启…"
 
 
 def _main() -> None:

@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QAction, QActionGroup, QColor, QPainter
 from PySide6.QtWidgets import QGridLayout, QLabel, QMenu, QWidget
 
-from . import catalog
+from . import __version__, catalog
 from .config import (
     COLOR_INTL,
     MODE_COMPACT,
@@ -280,6 +280,9 @@ class FloatingWindow(QWidget):
     # ---------- 右键菜单 ----------
     def contextMenuEvent(self, e):
         menu = QMenu(self)
+        header = menu.addAction(f"盯盘悬浮窗 v{__version__}")
+        header.setEnabled(False)
+        menu.addSeparator()
         mode_menu = menu.addMenu("显示模式")
         group = QActionGroup(mode_menu)
         group.setExclusive(True)
